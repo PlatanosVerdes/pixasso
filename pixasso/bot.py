@@ -5,7 +5,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (Application, CallbackQueryHandler, CommandHandler, ContextTypes,
                           MessageHandler, filters)
 
-from . import fit
+from . import discover, fit
 from .config import Config
 from .tv import ArtTV, TVUnavailable
 
@@ -13,6 +13,7 @@ log = logging.getLogger(__name__)
 
 COMMANDS = [
     ("help", "How it works"),
+    ("tv", "Choose the TV"),
     ("list", "Pictures on the TV"),
     ("crop", "Crop the next photo"),
     ("rotate", "Cycle the pictures: <minutes> or off"),
@@ -20,16 +21,17 @@ COMMANDS = [
 ]
 HELP = (
     "Send me a photo (better as a file, it keeps the quality) and I hang it on the TV.\n\n"
+    "/{p}tv - find the TVs on the network and choose one\n"
     "/{p}list - the pictures on the TV, to show or delete\n"
     "/{p}crop - crop the next photo instead of the blurred fill\n"
     "/{p}rotate <minutes> - cycle through them, /{p}rotate off stops it\n"
     "/{p}exit - leave art mode and go back to the TV home"
 )
-TV_DOWN = "The TV is not answering. Is it on, or in art mode?"
+TV_DOWN = "The TV is not answering. Is it on, in art mode, and chosen with /tv?"
 
 
 def build(cfg: Config) -> Application:
-    tv = ArtTV(cfg.tv_host, cfg.tv_token_file, cfg.tv_timeout)
+    tv = ArtTV(cfg.data_dir, cfg.tv_host, cfg.tv_timeout)
     allowed = filters.Chat(chat_id=list(cfg.allowed_chats))
 
     async def on_start(app: Application) -> None:
@@ -49,14 +51,16 @@ def build(cfg: Config) -> Application:
     app.bot_data["tv"] = tv
     app.bot_data["allowed"] = cfg.allowed_chats
     app.bot_data["prefix"] = p = cfg.prefix
+    app.bot_data["subnet"] = cfg.scan_subnet
 
     app.add_handler(CommandHandler([p + "help", p + "start"], help_cmd, filters=allowed))
+    app.add_handler(CommandHandler(p + "tv", tv_cmd, filters=allowed))
     app.add_handler(CommandHandler(p + "list", list_cmd, filters=allowed))
     app.add_handler(CommandHandler(p + "crop", crop_cmd, filters=allowed))
     app.add_handler(CommandHandler(p + "rotate", rotate_cmd, filters=allowed))
     app.add_handler(CommandHandler(p + "exit", exit_cmd, filters=allowed))
     app.add_handler(MessageHandler(allowed & (filters.PHOTO | filters.Document.IMAGE), picture))
-    app.add_handler(CallbackQueryHandler(button, pattern=f"^{p}(show|delete):"))
+    app.add_handler(CallbackQueryHandler(button, pattern=f"^{p}(show|delete|tv):"))
     app.add_error_handler(on_error)
     return app
 
@@ -119,6 +123,15 @@ async def button(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         await query.answer()
         return
     action, content_id = query.data.removeprefix(ctx.application.bot_data["prefix"]).split(":", 1)
+    if action == "tv":
+        tv_of(ctx).choose(content_id)
+        await query.answer(f"Pictures now go to {content_id}. Accept \"Allow\" on the TV if it asks.")
+        await query.edit_message_reply_markup(None)
+        try:
+            await tv_of(ctx).pair()
+        except TVUnavailable as e:
+            log.warning("pairing with %s failed: %s", content_id, e)
+        return
     try:
         if action == "show":
             await tv_of(ctx).show(content_id)
@@ -129,6 +142,23 @@ async def button(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             await query.message.delete()
     except TVUnavailable:
         await query.answer(TV_DOWN, show_alert=True)
+
+
+async def tv_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    msg = update.effective_message
+    status = await msg.reply_text("Looking for TVs...")
+    found = await discover.scan(ctx.application.bot_data["subnet"])
+    if not found:
+        await status.edit_text("No Samsung TV answered on the network. Is it on?")
+        return
+    current = tv_of(ctx).host
+    p = ctx.application.bot_data["prefix"]
+    buttons = InlineKeyboardMarkup([
+        [InlineKeyboardButton(("✓ " if tv.host == current else "") + f"{tv.name} {tv.model} ({tv.host})",
+                              callback_data=f"{p}tv:{tv.host}")]
+        for tv in found
+    ])
+    await status.edit_text("Which TV gets the pictures?", reply_markup=buttons)
 
 
 async def rotate_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:

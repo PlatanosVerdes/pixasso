@@ -1,4 +1,5 @@
 import asyncio
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -22,17 +23,31 @@ class TVUnavailable(Exception):
 class ArtTV:
     """Samsung art mode over the local websocket. Each call opens its own connection: the TV drops idle ones."""
 
-    def __init__(self, host: str, token_file: Path, timeout: float):
-        self.host = host
-        self.token_file = token_file
+    def __init__(self, data_dir: Path, default_host: str, timeout: float):
+        self.data_dir = data_dir
         self.timeout = timeout
+        self.state_file = data_dir / "state.json"
+        self.host = self._load_host() or default_host
+
+    def _load_host(self) -> str:
+        try:
+            return json.loads(self.state_file.read_text()).get("tv_host", "")
+        except (OSError, ValueError):
+            return ""
+
+    def choose(self, host: str) -> None:
+        self.host = host
+        self.state_file.write_text(json.dumps({"tv_host": host}))
 
     def _tv(self) -> SamsungTVWS:
+        # One token per TV: switching TVs must not ask "Allow" again on the one used before.
         return SamsungTVWS(host=self.host, port=8002, name=CLIENT_NAME,
-                           token_file=str(self.token_file), timeout=self.timeout)
+                           token_file=str(self.data_dir / f"tv-token-{self.host}.txt"), timeout=self.timeout)
 
     async def _run(self, fn):
         # Outside art mode the TV accepts the connection and never answers, so every call needs a deadline.
+        if not self.host:
+            raise TVUnavailable("no TV chosen yet")
         try:
             return await asyncio.wait_for(asyncio.to_thread(fn), self.timeout + 5)
         except (TimeoutError, OSError) as e:

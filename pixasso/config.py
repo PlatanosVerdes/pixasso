@@ -8,7 +8,9 @@ class Config:
     telegram_token: str
     allowed_chats: frozenset[int]
     tv_host: str
-    tv_token_file: Path
+    data_dir: Path
+    # Where /tv looks for TVs: "192.168.1.0/24".
+    scan_subnet: str
     tv_timeout: float
     port: int
     # push: switchboard reads a shared bot and posts the updates; poll: pixasso reads its own bot.
@@ -23,8 +25,9 @@ def load() -> Config:
     return Config(
         telegram_token=os.environ["PIXASSO_TELEGRAM_TOKEN"],
         allowed_chats=frozenset(int(c) for c in chats.split(",") if c.strip()),
-        tv_host=os.environ["PIXASSO_TV_HOST"],
-        tv_token_file=data_dir / "tv-token.txt",
+        tv_host=os.environ.get("PIXASSO_TV_HOST", ""),
+        data_dir=data_dir,
+        scan_subnet=os.environ.get("PIXASSO_SCAN_SUBNET", "192.168.1.0/24"),
         tv_timeout=float(os.environ.get("PIXASSO_TV_TIMEOUT", "30")),
         port=int(os.environ.get("PIXASSO_PORT", "8080")),
         push=os.environ.get("PIXASSO_UPDATES", "poll") == "push",
