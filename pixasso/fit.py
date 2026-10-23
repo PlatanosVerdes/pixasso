@@ -4,13 +4,15 @@ from PIL import Image, ImageFilter, ImageOps
 
 WIDTH, HEIGHT = 3840, 2160
 TARGET_RATIO = WIDTH / HEIGHT
+# Cropping more than this off a picture loses what it is about; past it the whole picture goes over a blurred fill.
+CROP_TOLERANCE = 0.12
 
 
 def fit(data: bytes, force_crop: bool = False) -> bytes:
-    """Return a 3840x2160 JPEG: crop when the picture is landscape, blurred fill when portrait."""
+    """Return a 3840x2160 JPEG: crop when the picture is close to 16:9, otherwise blurred fill."""
     img = ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB")
-    landscape = img.width / img.height >= 1
-    out = cover(img) if landscape or force_crop else blurred_fill(img)
+    near_screen = abs(img.width / img.height - TARGET_RATIO) / TARGET_RATIO <= CROP_TOLERANCE
+    out = cover(img) if near_screen or force_crop else blurred_fill(img)
     buf = io.BytesIO()
     out.save(buf, "JPEG", quality=92)
     return buf.getvalue()

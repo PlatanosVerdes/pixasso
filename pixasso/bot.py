@@ -87,10 +87,15 @@ async def picture(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     status = await msg.reply_text("Hanging it...")
     try:
         content_id = await tv_of(ctx).upload(jpeg)
-        await tv_of(ctx).show(content_id)
-    except TVUnavailable:
+    except TVUnavailable as e:
+        log.warning("photo not uploaded: %s", e)
         await status.edit_text(TV_DOWN)
         return
+    try:
+        await tv_of(ctx).show(content_id)
+    except TVUnavailable as e:
+        # Seen on a Q8F: the TV switches to the picture but never sends the confirmation.
+        log.warning("no confirmation showing %s: %s", content_id, e)
     await status.edit_text("On the TV.")
 
 
@@ -113,7 +118,8 @@ async def list_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         try:
             thumb = await tv_of(ctx).thumbnail(p.content_id)
             await msg.reply_photo(thumb, caption=p.content_id, reply_markup=buttons)
-        except TVUnavailable:
+        except TVUnavailable as e:
+            log.warning("no thumbnail for %s: %s", p.content_id, e)
             await msg.reply_text(p.content_id, reply_markup=buttons)
 
 
