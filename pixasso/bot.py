@@ -11,12 +11,21 @@ from .tv import ArtTV, TVUnavailable
 
 log = logging.getLogger(__name__)
 
+# The services bot is shared, so every command and button carries this prefix.
+PREFIX = "tv_"
+COMMANDS = [
+    ("help", "TV art: how it works"),
+    ("list", "TV art: pictures on the TV"),
+    ("crop", "TV art: crop the next photo"),
+    ("rotate", "TV art: /tv_rotate <minutes> or off"),
+    ("exit", "TV art: leave art mode"),
+]
 HELP = (
     "Send me a photo (better as a file, it keeps the quality) and I hang it on the TV.\n\n"
-    "/list - the pictures on the TV, to show or delete\n"
-    "/crop - crop the next photo instead of the blurred fill\n"
-    "/rotate <minutes> - cycle through them, /rotate off stops it\n"
-    "/exit - leave art mode and go back to the TV home"
+    "/tv_list - the pictures on the TV, to show or delete\n"
+    "/tv_crop - crop the next photo instead of the blurred fill\n"
+    "/tv_rotate <minutes> - cycle through them, /tv_rotate off stops it\n"
+    "/tv_exit - leave art mode and go back to the TV home"
 )
 TV_DOWN = "The TV is not answering. Is it on, or in art mode?"
 
@@ -31,17 +40,18 @@ def build(cfg: Config) -> Application:
         except TVUnavailable as e:
             log.warning("TV pairing skipped: %s", e)
 
-    app = Application.builder().token(cfg.telegram_token).post_init(on_start).build()
+    # No updater: switchboard reads the bot and posts each update here.
+    app = Application.builder().token(cfg.telegram_token).updater(None).post_init(on_start).build()
     app.bot_data["tv"] = tv
     app.bot_data["allowed"] = cfg.allowed_chats
 
-    app.add_handler(CommandHandler(["start", "help"], help_cmd, filters=allowed))
-    app.add_handler(CommandHandler(["list", "show", "delete"], list_cmd, filters=allowed))
-    app.add_handler(CommandHandler("crop", crop_cmd, filters=allowed))
-    app.add_handler(CommandHandler("rotate", rotate_cmd, filters=allowed))
-    app.add_handler(CommandHandler("exit", exit_cmd, filters=allowed))
+    app.add_handler(CommandHandler(PREFIX + "help", help_cmd, filters=allowed))
+    app.add_handler(CommandHandler(PREFIX + "list", list_cmd, filters=allowed))
+    app.add_handler(CommandHandler(PREFIX + "crop", crop_cmd, filters=allowed))
+    app.add_handler(CommandHandler(PREFIX + "rotate", rotate_cmd, filters=allowed))
+    app.add_handler(CommandHandler(PREFIX + "exit", exit_cmd, filters=allowed))
     app.add_handler(MessageHandler(allowed & (filters.PHOTO | filters.Document.IMAGE), picture))
-    app.add_handler(CallbackQueryHandler(button))
+    app.add_handler(CallbackQueryHandler(button, pattern=f"^{PREFIX}"))
     app.add_error_handler(on_error)
     return app
 
@@ -87,8 +97,8 @@ async def list_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         return
     for p in pictures:
         buttons = InlineKeyboardMarkup([[
-            InlineKeyboardButton("Show", callback_data=f"show:{p.content_id}"),
-            InlineKeyboardButton("Delete", callback_data=f"delete:{p.content_id}"),
+            InlineKeyboardButton("Show", callback_data=f"{PREFIX}show:{p.content_id}"),
+            InlineKeyboardButton("Delete", callback_data=f"{PREFIX}delete:{p.content_id}"),
         ]])
         try:
             thumb = await tv_of(ctx).thumbnail(p.content_id)
@@ -102,7 +112,7 @@ async def button(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_chat.id not in ctx.application.bot_data["allowed"]:
         await query.answer()
         return
-    action, content_id = query.data.split(":", 1)
+    action, content_id = query.data.removeprefix(PREFIX).split(":", 1)
     try:
         if action == "show":
             await tv_of(ctx).show(content_id)
@@ -123,7 +133,7 @@ async def rotate_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     elif arg.isdigit() and int(arg) > 0:
         minutes = int(arg)
     else:
-        await msg.reply_text("Usage: /rotate <minutes> or /rotate off")
+        await msg.reply_text("Usage: /tv_rotate <minutes> or /tv_rotate off")
         return
     try:
         await tv_of(ctx).rotate(minutes)

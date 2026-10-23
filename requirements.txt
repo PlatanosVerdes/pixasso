@@ -1,3 +1,4 @@
 python-telegram-bot==22.8
 samsungtvws[encrypted]==3.0.6
 pillow==13.0.0
+aiohttp==3.14.5

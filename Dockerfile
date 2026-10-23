@@ -13,5 +13,6 @@ VOLUME /data
 ENV PIXASSO_DATA_DIR=/data \
     PYTHONUNBUFFERED=1
 
+EXPOSE 8080
 USER pixasso
 CMD ["python", "-m", "pixasso"]

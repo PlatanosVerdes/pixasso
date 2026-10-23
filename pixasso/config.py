@@ -10,6 +10,7 @@ class Config:
     tv_host: str
     tv_token_file: Path
     tv_timeout: float
+    port: int
 
 
 def load() -> Config:
@@ -21,4 +22,5 @@ def load() -> Config:
         tv_host=os.environ["PIXASSO_TV_HOST"],
         tv_token_file=data_dir / "tv-token.txt",
         tv_timeout=float(os.environ.get("PIXASSO_TV_TIMEOUT", "30")),
+        port=int(os.environ.get("PIXASSO_PORT", "8080")),
     )
