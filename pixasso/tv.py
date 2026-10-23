@@ -74,7 +74,11 @@ class ArtTV:
         return await self._run(lambda: self._art().upload(jpeg, file_type="JPEG", matte="none"))
 
     async def show(self, content_id: str) -> None:
-        await self._run(lambda: self._art().select_image(content_id, show=True))
+        # Switch to the picture only in art mode: otherwise it would cut off whatever is on.
+        def select():
+            art = self._art()
+            art.select_image(content_id, show=art.get_artmode() == "on")
+        await self._run(select)
 
     async def current(self) -> str:
         return (await self._run(lambda: self._art().get_current())).get("content_id", "")
