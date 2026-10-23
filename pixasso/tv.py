@@ -50,8 +50,11 @@ class ArtTV:
             raise TVUnavailable("no TV chosen yet")
         try:
             return await asyncio.wait_for(asyncio.to_thread(fn), self.timeout + 5)
-        except (TimeoutError, OSError) as e:
-            raise TVUnavailable(str(e)) from e
+        except TVUnavailable:
+            raise
+        except Exception as e:
+            # samsungtvws and websocket-client raise their own types for a TV that is off, asleep or not allowed yet.
+            raise TVUnavailable(f"{type(e).__name__}: {e}") from e
 
     async def pair(self) -> None:
         # The art channel refuses a client that never paired on the remote channel.
