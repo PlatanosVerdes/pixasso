@@ -4,15 +4,23 @@ from PIL import Image, ImageFilter, ImageOps
 
 WIDTH, HEIGHT = 3840, 2160
 TARGET_RATIO = WIDTH / HEIGHT
-# Cropping more than this off a picture loses what it is about; past it the whole picture goes over a blurred fill.
-CROP_TOLERANCE = 0.12
+# Within this of 16:9 a crop takes off almost nothing, so the owner is not asked.
+CROP_TOLERANCE = 0.03
+
+
+def open_image(data: bytes) -> Image.Image:
+    return ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB")
+
+
+def fits_screen(data: bytes) -> bool:
+    img = open_image(data)
+    return abs(img.width / img.height - TARGET_RATIO) / TARGET_RATIO <= CROP_TOLERANCE
 
 
 def fit(data: bytes, force_crop: bool = False) -> bytes:
-    """Return a 3840x2160 JPEG: crop when the picture is close to 16:9, otherwise blurred fill."""
-    img = ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB")
-    near_screen = abs(img.width / img.height - TARGET_RATIO) / TARGET_RATIO <= CROP_TOLERANCE
-    out = cover(img) if near_screen or force_crop else blurred_fill(img)
+    """Return a 3840x2160 JPEG like the TV's own art: cropped to fill, or whole over a blurred fill."""
+    img = open_image(data)
+    out = cover(img) if force_crop or fits_screen(data) else blurred_fill(img)
     buf = io.BytesIO()
     out.save(buf, "JPEG", quality=92)
     return buf.getvalue()

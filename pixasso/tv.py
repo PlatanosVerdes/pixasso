@@ -44,6 +44,12 @@ class ArtTV:
         return SamsungTVWS(host=self.host, port=8002, name=CLIENT_NAME,
                            token_file=str(self.data_dir / f"tv-token-{self.host}.txt"), timeout=self.timeout)
 
+    def _art(self):
+        # After the TV is switched on the art channel refuses a client until it has opened the remote one.
+        tv = self._tv()
+        tv.open()
+        return tv.art()
+
     async def _run(self, fn):
         # Outside art mode the TV accepts the connection and never answers, so every call needs a deadline.
         if not self.host:
@@ -61,28 +67,30 @@ class ArtTV:
         await self._run(lambda: self._tv().open())
 
     async def pictures(self) -> list[Picture]:
-        items = await self._run(lambda: self._tv().art().available(MY_PHOTOS))
+        items = await self._run(lambda: self._art().available(MY_PHOTOS))
         return [Picture(i["content_id"], int(i.get("width", 0)), int(i.get("height", 0))) for i in items]
 
     async def upload(self, jpeg: bytes) -> str:
-        return await self._run(lambda: self._tv().art().upload(jpeg, file_type="JPEG", matte="none"))
+        return await self._run(lambda: self._art().upload(jpeg, file_type="JPEG", matte="none"))
 
     async def show(self, content_id: str) -> None:
-        await self._run(lambda: self._tv().art().select_image(content_id, show=True))
+        await self._run(lambda: self._art().select_image(content_id, show=True))
+
+    async def current(self) -> str:
+        return (await self._run(lambda: self._art().get_current())).get("content_id", "")
 
     async def delete(self, content_id: str) -> bool:
-        return await self._run(lambda: self._tv().art().delete(content_id))
+        return await self._run(lambda: self._art().delete(content_id))
 
     async def thumbnail(self, content_id: str) -> bytes:
-        return bytes(await self._run(lambda: self._tv().art().get_thumbnail(content_id)))
+        return bytes(await self._run(lambda: self._art().get_thumbnail(content_id)))
 
     async def rotate(self, minutes: int) -> None:
         # The TV rotates by itself, so it keeps going while the bot is down; 0 turns it off.
-        await self._run(lambda: self._tv().art().set_slideshow_status(duration=minutes, type=True, category_id=MY_PHOTOS))
+        await self._run(lambda: self._art().set_slideshow_status(duration=minutes, type=True, category_id=MY_PHOTOS))
 
     async def leave_art_mode(self) -> None:
         def leave():
-            tv = self._tv()
-            tv.art().set_artmode(False)
-            tv.send_key("KEY_HOME")
+            self._art().set_artmode(False)
+            self._tv().send_key("KEY_HOME")
         await self._run(leave)
