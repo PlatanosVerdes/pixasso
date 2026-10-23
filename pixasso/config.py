@@ -11,6 +11,10 @@ class Config:
     tv_token_file: Path
     tv_timeout: float
     port: int
+    # push: switchboard reads a shared bot and posts the updates; poll: pixasso reads its own bot.
+    push: bool
+    # Commands and buttons start with it on a shared bot: "tv_".
+    prefix: str
 
 
 def load() -> Config:
@@ -23,4 +27,6 @@ def load() -> Config:
         tv_token_file=data_dir / "tv-token.txt",
         tv_timeout=float(os.environ.get("PIXASSO_TV_TIMEOUT", "30")),
         port=int(os.environ.get("PIXASSO_PORT", "8080")),
+        push=os.environ.get("PIXASSO_UPDATES", "poll") == "push",
+        prefix=os.environ.get("PIXASSO_PREFIX", ""),
     )

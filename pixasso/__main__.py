@@ -24,7 +24,7 @@ async def serve(cfg: config.Config) -> None:
             return web.Response(status=202)
 
         async def commands(_: web.Request) -> web.Response:
-            return web.json_response([{"command": bot.PREFIX + name, "description": help}
+            return web.json_response([{"command": cfg.prefix + name, "description": help}
                                       for name, help in bot.COMMANDS])
 
         async def healthz(_: web.Request) -> web.Response:
@@ -53,7 +53,11 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("aiohttp.access").setLevel(logging.WARNING)
-    asyncio.run(serve(config.load()))
+    cfg = config.load()
+    if cfg.push:
+        asyncio.run(serve(cfg))
+    else:
+        bot.build(cfg).run_polling(drop_pending_updates=True)
 
 
 if __name__ == "__main__":
