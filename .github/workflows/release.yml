@@ -6,6 +6,8 @@ name: Release
 on:
   push:
     branches: [main]
+    # Only what goes into the image is a new version.
+    paths: ["pixasso/**", "requirements.txt", "Dockerfile", "!**/*.md"]
 
 permissions:
   contents: write
